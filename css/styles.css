@@ -1,79 +1,99 @@
-/* Main styles for the Pandemic Resilience System */
+/* Import modern font */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
 
-/* Base styles */
+:root {
+    --primary: #0d6efd;
+    --primary-hover: #0b5ed7;
+    --bg-light: #f8f9fa;
+    --text-dark: #212529;
+    --text-muted: #6c757d;
+    --radius: 12px;
+    --shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    --shadow-hover: 0 8px 20px rgba(0, 0, 0, 0.1);
+    --transition: 0.3s ease-in-out;
+}
+
+/* Base styling */
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'Inter', sans-serif !important;
+    background-color: var(--bg-light) !important;
+    color: var(--text-dark);
     padding-bottom: 2rem;
 }
 
-/* Authentication pages */
-.login-container, .register-container {
-    max-width: 450px;
-    margin: 100px auto;
-    padding: 25px;
-    border-radius: 10px;
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+/* Navbar */
+.navbar {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
 
-/* Dashboard styles */
-.stat-card {
-    text-align: center;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    transition: transform 0.3s;
-}
-
-.stat-card:hover {
-    transform: translateY(-5px);
-}
-
-/* Charts */
-canvas {
-    max-width: 100%;
-    height: auto !important;
-}
-
-@media (max-width: 768px) {
-    .login-container, .register-container {
-        margin: 50px auto;
-        padding: 15px;
-    }
-    
-    .stat-card {
-        margin-bottom: 20px;
-    }
-}
-
-/* Card hover effect */
-.card {
-    transition: transform 0.2s;
-}
-
-.card:hover {
-    transform: translateY(-5px);
-}
-
-/* Navbar customization */
 .navbar-brand {
-    font-weight: bold;
+    font-weight: 600;
 }
 
-/* Authentication form elements */
-.form-control:focus {
-    border-color: #0d6efd;
-    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
-}
-
-/* Custom buttons */
-.btn-primary {
+.navbar-nav .nav-link {
     font-weight: 500;
 }
 
-/* Chart container styling */
-.chart-container {
-    position: relative;
-    margin: auto;
-    height: 300px;
-    width: 100%;
+/* Dashboard title card */
+.card-title {
+    font-weight: 600;
+}
+
+/* Stat Cards */
+.card.shadow {
+    border-radius: var(--radius);
+    transition: transform var(--transition), box-shadow var(--transition);
+    border: none;
+    background-color: #ffffff;
+}
+
+.card.shadow:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-hover);
+}
+
+/* Chart Cards */
+.card-body {
+    padding: 1.5rem;
+}
+
+/* Large number styling */
+.display-4 {
+    font-weight: 600;
+    color: var(--primary);
+}
+
+/* Chart responsiveness */
+canvas {
+    width: 100% !important;
+    height: auto !important;
+    max-height: 300px;
+}
+
+/* Responsive tweaks */
+@media (max-width: 768px) {
+    .card {
+        margin-bottom: 1rem;
+    }
+
+    .display-4 {
+        font-size: 2rem;
+    }
+}
+
+/* ✅ Colored Stat Cards */
+.row.mb-4 > .col-md-3:nth-child(1) .card {
+    background-color: #e3f2fd; /* Light Blue */
+}
+
+.row.mb-4 > .col-md-3:nth-child(2) .card {
+    background-color: #e8f5e9; /* Light Green */
+}
+
+.row.mb-4 > .col-md-3:nth-child(3) .card {
+    background-color: #fff3e0; /* Light Orange */
+}
+
+.row.mb-4 > .col-md-3:nth-child(4) .card {
+    background-color: #fce4ec; /* Light Pink */
 }
