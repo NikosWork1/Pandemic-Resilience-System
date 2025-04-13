@@ -150,13 +150,26 @@ document.addEventListener('DOMContentLoaded', function() {
             window.location.href = 'login.html';
         });
     }
+
+    // Check user role for access control on page load
+    if (!window.location.href.includes('login.html') && !window.location.href.includes('register.html')) {
+        checkUserRole();
+    }
 });
 
 // Check user role and restrict access if needed
 function checkUserRole() {
     const token = localStorage.getItem('prs_token');
     
-    fetch('api.php/users', {
+    // First, get the authenticated user's ID from the token
+    const currentUserId = getUserIdFromToken(token);
+    if (!currentUserId) {
+        console.error('Invalid token or user ID not found in token');
+        return;
+    }
+    
+    // Fetch the specific user data for the authenticated user
+    fetch(`api.php/users/${currentUserId}`, {
         headers: {
             'Authorization': token
         }
@@ -169,28 +182,56 @@ function checkUserRole() {
         }
         return response.json();
     })
-    .then(users => {
-        // Find the current user (based on the token)
-        const currentUser = users.find(user => {
-            // This is a simplified version. In a real app, you'd need to decode the JWT
-            // For now, we'll just check if this is the first user returned
-            return user.user_id === 1; // Assuming the first user is the authenticated one
-        });
-        
-        // For supply management, only Government Officials and Merchants have access
-        if (window.location.href.includes('supply-management.html') && 
-            !(currentUser.role_name === 'Government Official' || currentUser.role_name === 'Merchant')) {
-            alert('You do not have permission to access Supply Management.');
-            window.location.href = 'index.html';
+    .then(currentUser => {
+        if (!currentUser || !currentUser.role_name) {
+            throw new Error('User data not found or incomplete');
         }
         
-        // For health facilities, only Government Officials have full access
-        if (window.location.href.includes('health-facilities.html') && 
-            !(currentUser.role_name === 'Government Official')) {
-            // For non-Government Officials, hide add/edit/delete buttons
-            document.querySelectorAll('.admin-only').forEach(el => {
-                el.style.display = 'none';
-            });
+        console.log('Authenticated user:', currentUser.full_name, 'Role:', currentUser.role_name);
+        
+        // Update user name on dashboard
+        const userNameElement = document.getElementById('userName');
+        if (userNameElement) {
+            userNameElement.textContent = currentUser.full_name;
+        }
+        
+        // Update navigation based on user role
+        updateNavigation(currentUser.role_name);
+        
+        // Apply role-based access control
+        if (currentUser.role_name === 'Government Official') {
+            // Government Officials have full access
+            console.log('User has Government Official role - full access granted');
+        } 
+        else if (currentUser.role_name === 'Doctor' || currentUser.role_name === 'Merchant') {
+            // Doctors (or Merchants) have limited access
+            console.log('User has Doctor role - partial access granted');
+            
+            // For health facilities, only Government Officials have full access
+            if (window.location.href.includes('health-facilities.html')) {
+                // For Doctors, hide admin-only elements (add/edit/delete buttons)
+                document.querySelectorAll('.admin-only').forEach(el => {
+                    el.style.display = 'none';
+                });
+            }
+        } 
+        else {
+            // Public Members have very limited access
+            console.log('User has Public Member role - restricted access');
+            
+            // For supply management, only Government Officials and Doctors have access
+            if (window.location.href.includes('supply-management.html')) {
+                alert('You do not have permission to access Supply Management.');
+                window.location.href = 'index.html';
+                return;
+            }
+            
+            // For health facilities, Public Members shouldn't have access
+            if (window.location.href.includes('health-facilities.html')) {
+                alert('You do not have permission to access Health Facilities.');
+                window.location.href = 'index.html';
+                return;
+            }
         }
     })
     .catch(error => {
@@ -198,6 +239,50 @@ function checkUserRole() {
             console.error('Error checking user role:', error);
         }
     });
+}
+
+// Function to update navigation links based on user role
+function updateNavigation(roleName) {
+    const facilityLink = document.querySelector('a.nav-link[href="health-facilities.html"]');
+    const supplyLink = document.querySelector('a.nav-link[href="supply-management.html"]');
+    
+    if (facilityLink && supplyLink) {
+        if (roleName === 'Public Member') {
+            // Public members shouldn't see Health Facilities or Supply Management
+            facilityLink.parentElement.style.display = 'none';
+            supplyLink.parentElement.style.display = 'none';
+        } else if (roleName === 'Doctor' || roleName === 'Merchant') {
+            // Doctors can see both but with limited controls
+            facilityLink.parentElement.classList.add('doctor-view');
+            supplyLink.parentElement.classList.add('doctor-view');
+        }
+        // Government Officials see everything by default
+    }
+}
+
+// Function to extract user_id from JWT token
+function getUserIdFromToken(token) {
+    try {
+        if (!token) return null;
+        
+        if (token.startsWith('Bearer ')) {
+            token = token.slice(7);
+        }
+        
+        const parts = token.split('.');
+        if (parts.length !== 3) {
+            return null;
+        }
+        
+        const payload = parts[1];
+        const decodedPayload = atob(payload);
+        const payloadObj = JSON.parse(decodedPayload);
+        
+        return payloadObj.user_id;
+    } catch (error) {
+        console.error('Error decoding token:', error);
+        return null;
+    }
 }
 
 // Load dashboard data and charts
@@ -220,7 +305,10 @@ function loadDashboardData() {
     })
     .then(data => {
         // Update dashboard metrics
-        document.getElementById('vaccinationCount').textContent = data.length;
+        const vaccinationCountElement = document.getElementById('vaccinationCount');
+        if (vaccinationCountElement) {
+            vaccinationCountElement.textContent = data.length;
+        }
         
         // Prepare data for charts
         const users = {};
@@ -252,94 +340,103 @@ function loadDashboardData() {
         });
         
         // Create Bar Chart - Vaccination by User
-        const userLabels = Object.keys(users);
-        const userCounts = Object.values(users);
-        
-        new Chart(document.getElementById('barChart').getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels: userLabels,
-                datasets: [{
-                    label: 'Vaccinations per User',
-                    data: userCounts,
-                    backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            stepSize: 1
+        const barChartElement = document.getElementById('barChart');
+        if (barChartElement) {
+            const userLabels = Object.keys(users);
+            const userCounts = Object.values(users);
+            
+            new Chart(barChartElement.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: userLabels,
+                    datasets: [{
+                        label: 'Vaccinations per User',
+                        data: userCounts,
+                        backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
                         }
                     }
                 }
-            }
-        });
+            });
+        }
         
         // Create Pie Chart - Vaccine Types
-        const vaccineLabels = Object.keys(vaccineTypes);
-        const vaccineCounts = Object.values(vaccineTypes);
-        
-        new Chart(document.getElementById('pieChart').getContext('2d'), {
-            type: 'pie',
-            data: {
-                labels: vaccineLabels,
-                datasets: [{
-                    label: 'Vaccine Types',
-                    data: vaccineCounts,
-                    backgroundColor: [
-                        'rgba(255, 99, 132, 0.6)',
-                        'rgba(54, 162, 235, 0.6)',
-                        'rgba(255, 206, 86, 0.6)',
-                        'rgba(75, 192, 192, 0.6)'
-                    ],
-                    borderColor: [
-                        'rgba(255, 99, 132, 1)',
-                        'rgba(54, 162, 235, 1)',
-                        'rgba(255, 206, 86, 1)',
-                        'rgba(75, 192, 192, 1)'
-                    ],
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true
-            }
-        });
+        const pieChartElement = document.getElementById('pieChart');
+        if (pieChartElement) {
+            const vaccineLabels = Object.keys(vaccineTypes);
+            const vaccineCounts = Object.values(vaccineTypes);
+            
+            new Chart(pieChartElement.getContext('2d'), {
+                type: 'pie',
+                data: {
+                    labels: vaccineLabels,
+                    datasets: [{
+                        label: 'Vaccine Types',
+                        data: vaccineCounts,
+                        backgroundColor: [
+                            'rgba(255, 99, 132, 0.6)',
+                            'rgba(54, 162, 235, 0.6)',
+                            'rgba(255, 206, 86, 0.6)',
+                            'rgba(75, 192, 192, 0.6)'
+                        ],
+                        borderColor: [
+                            'rgba(255, 99, 132, 1)',
+                            'rgba(54, 162, 235, 1)',
+                            'rgba(255, 206, 86, 1)',
+                            'rgba(75, 192, 192, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true
+                }
+            });
+        }
         
         // Create Line Chart - Vaccinations Over Time
-        const dateLabels = Object.keys(dateMap).sort((a, b) => new Date(a) - new Date(b));
-        const dateCounts = dateLabels.map(date => dateMap[date]);
-        
-        new Chart(document.getElementById('lineChart').getContext('2d'), {
-            type: 'line',
-            data: {
-                labels: dateLabels,
-                datasets: [{
-                    label: 'Vaccinations Over Time',
-                    data: dateCounts,
-                    fill: false,
-                    backgroundColor: 'rgba(75, 192, 192, 0.6)',
-                    borderColor: 'rgba(75, 192, 192, 1)',
-                    tension: 0.1
-                }]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            stepSize: 1
+        const lineChartElement = document.getElementById('lineChart');
+        if (lineChartElement) {
+            const dateLabels = Object.keys(dateMap).sort((a, b) => new Date(a) - new Date(b));
+            const dateCounts = dateLabels.map(date => dateMap[date]);
+            
+            new Chart(lineChartElement.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: dateLabels,
+                    datasets: [{
+                        label: 'Vaccinations Over Time',
+                        data: dateCounts,
+                        fill: false,
+                        backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
                         }
                     }
                 }
-            }
-        });
+            });
+        }
         
         // Fetch user data
         fetch('api.php/users', {
@@ -350,20 +447,14 @@ function loadDashboardData() {
         .then(response => response.json())
         .then(userData => {
             // Update user count
-            document.getElementById('userCount').textContent = userData.length;
-            
-            // Get current user's name
-            const userNameElement = document.getElementById('userName');
-            if (userNameElement && userData.length > 0) {
-                // Using the first user for demo purposes
-                userNameElement.textContent = userData[0].full_name;
+            const userCountElement = document.getElementById('userCount');
+            if (userCountElement) {
+                userCountElement.textContent = userData.length;
             }
+            
+            // User name is now updated in checkUserRole function
         })
         .catch(error => console.error('Error fetching user data:', error));
-        
-        // For document count, we're just showing a sample count here
-        // In a real system, you'd fetch from the documents API endpoint
-        document.getElementById('documentCount').textContent = Math.floor(Math.random() * 10);
     })
     .catch(error => {
         if (error.message !== 'Unauthorized') {
@@ -387,7 +478,10 @@ function loadDashboardData() {
     })
     .then(facilitiesData => {
         // Update facility count
-        document.getElementById('facilityCount').textContent = facilitiesData.length;
+        const facilityCountElement = document.getElementById('facilityCount');
+        if (facilityCountElement) {
+            facilityCountElement.textContent = facilitiesData.length;
+        }
         
         // Prepare data for facility type chart
         const facilityTypes = {};
@@ -401,37 +495,40 @@ function loadDashboardData() {
         });
         
         // Create Pie Chart - Facility Types
-        const facilityTypeLabels = Object.keys(facilityTypes);
-        const facilityTypeCounts = Object.values(facilityTypes);
-        
-        new Chart(document.getElementById('facilityTypeChart').getContext('2d'), {
-            type: 'pie',
-            data: {
-                labels: facilityTypeLabels,
-                datasets: [{
-                    label: 'Facility Types',
-                    data: facilityTypeCounts,
-                    backgroundColor: [
-                        'rgba(75, 192, 192, 0.6)',
-                        'rgba(153, 102, 255, 0.6)',
-                        'rgba(255, 159, 64, 0.6)',
-                        'rgba(255, 99, 132, 0.6)',
-                        'rgba(54, 162, 235, 0.6)'
-                    ],
-                    borderColor: [
-                        'rgba(75, 192, 192, 1)',
-                        'rgba(153, 102, 255, 1)',
-                        'rgba(255, 159, 64, 1)',
-                        'rgba(255, 99, 132, 1)',
-                        'rgba(54, 162, 235, 1)'
-                    ],
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true
-            }
-        });
+        const facilityTypeChartElement = document.getElementById('facilityTypeChart');
+        if (facilityTypeChartElement) {
+            const facilityTypeLabels = Object.keys(facilityTypes);
+            const facilityTypeCounts = Object.values(facilityTypes);
+            
+            new Chart(facilityTypeChartElement.getContext('2d'), {
+                type: 'pie',
+                data: {
+                    labels: facilityTypeLabels,
+                    datasets: [{
+                        label: 'Facility Types',
+                        data: facilityTypeCounts,
+                        backgroundColor: [
+                            'rgba(75, 192, 192, 0.6)',
+                            'rgba(153, 102, 255, 0.6)',
+                            'rgba(255, 159, 64, 0.6)',
+                            'rgba(255, 99, 132, 0.6)',
+                            'rgba(54, 162, 235, 0.6)'
+                        ],
+                        borderColor: [
+                            'rgba(75, 192, 192, 1)',
+                            'rgba(153, 102, 255, 1)',
+                            'rgba(255, 159, 64, 1)',
+                            'rgba(255, 99, 132, 1)',
+                            'rgba(54, 162, 235, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true
+                }
+            });
+        }
     })
     .catch(error => {
         if (error.message !== 'Unauthorized') {
@@ -455,7 +552,10 @@ function loadDashboardData() {
     })
     .then(supplyData => {
         // Update supply count
-        document.getElementById('supplyCount').textContent = supplyData.length;
+        const supplyCountElement = document.getElementById('supplyCount');
+        if (supplyCountElement) {
+            supplyCountElement.textContent = supplyData.length;
+        }
         
         // Prepare data for supply type chart
         const supplyTypes = {};
@@ -471,38 +571,41 @@ function loadDashboardData() {
         });
         
         // Create Bar Chart - Supply Types
-        const supplyTypeLabels = Object.keys(supplyTypes).map(type => {
-            switch(type) {
-                case 'vaccine': return 'Vaccines';
-                case 'medical_supply': return 'Medical Supplies';
-                case 'ppe': return 'PPE';
-                case 'equipment': return 'Equipment';
-                default: return type;
-            }
-        });
-        const supplyTypeCounts = Object.values(supplyTypes);
-        
-        new Chart(document.getElementById('supplyTypeChart').getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels: supplyTypeLabels,
-                datasets: [{
-                    label: 'Quantity in Stock',
-                    data: supplyTypeCounts,
-                    backgroundColor: 'rgba(153, 102, 255, 0.6)',
-                    borderColor: 'rgba(153, 102, 255, 1)',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: {
-                        beginAtZero: true
+        const supplyTypeChartElement = document.getElementById('supplyTypeChart');
+        if (supplyTypeChartElement) {
+            const supplyTypeLabels = Object.keys(supplyTypes).map(type => {
+                switch(type) {
+                    case 'vaccine': return 'Vaccines';
+                    case 'medical_supply': return 'Medical Supplies';
+                    case 'ppe': return 'PPE';
+                    case 'equipment': return 'Equipment';
+                    default: return type;
+                }
+            });
+            const supplyTypeCounts = Object.values(supplyTypes);
+            
+            new Chart(supplyTypeChartElement.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: supplyTypeLabels,
+                    datasets: [{
+                        label: 'Quantity in Stock',
+                        data: supplyTypeCounts,
+                        backgroundColor: 'rgba(153, 102, 255, 0.6)',
+                        borderColor: 'rgba(153, 102, 255, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
     })
     .catch(error => {
         if (error.message !== 'Unauthorized') {
