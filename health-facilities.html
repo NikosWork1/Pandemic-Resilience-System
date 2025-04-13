@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Health Facilities | Pandemic Resilience System</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#">Pandemic Resilience System</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="index.html">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="health-facilities.html">Health Facilities</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="supply-management.html">Supply Management</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" id="logoutBtn">Logout</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card shadow">
+                    <div class="card-body">
+                        <h3 class="card-title">Health Facilities Management</h3>
+                        <p class="card-text">Manage healthcare facilities in the pandemic response network.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card shadow">
+                    <div class="card-body">
+                        <h5 class="card-title">Add New Health Facility</h5>
+                        <form id="facilityForm">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="facility_name" class="form-label">Facility Name</label>
+                                    <input type="text" class="form-control" id="facility_name" required>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="facility_type" class="form-label">Facility Type</label>
+                                    <select class="form-select" id="facility_type" required>
+                                        <option value="">Select type</option>
+                                        <option value="Hospital">Hospital</option>
+                                        <option value="Clinic">Clinic</option>
+                                        <option value="Vaccination Center">Vaccination Center</option>
+                                        <option value="Testing Center">Testing Center</option>
+                                        <option value="Quarantine Center">Quarantine Center</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-12 mb-3">
+                                    <label for="address" class="form-label">Address</label>
+                                    <textarea class="form-control" id="address" rows="2" required></textarea>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <label for="contact_number" class="form-label">Contact Number</label>
+                                    <input type="text" class="form-control" id="contact_number">
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label for="email" class="form-label">Email</label>
+                                    <input type="email" class="form-control" id="email">
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label for="capacity" class="form-label">Capacity</label>
+                                    <input type="number" class="form-control" id="capacity" min="0">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="status" class="form-label">Status</label>
+                                    <select class="form-select" id="status">
+                                        <option value="active">Active</option>
+                                        <option value="inactive">Inactive</option>
+                                        <option value="under_maintenance">Under Maintenance</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6 mb-3 d-flex align-items-end">
+                                    <button type="submit" class="btn btn-primary w-100">Add Facility</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card shadow">
+                    <div class="card-body">
+                        <h5 class="card-title">Health Facilities</h5>
+                        
+                        <!-- Filters -->
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <select class="form-select" id="typeFilter">
+                                    <option value="">All Facility Types</option>
+                                    <option value="Hospital">Hospital</option>
+                                    <option value="Clinic">Clinic</option>
+                                    <option value="Vaccination Center">Vaccination Center</option>
+                                    <option value="Testing Center">Testing Center</option>
+                                    <option value="Quarantine Center">Quarantine Center</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <select class="form-select" id="statusFilter">
+                                    <option value="">All Statuses</option>
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                    <option value="under_maintenance">Under Maintenance</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <input type="text" class="form-control" id="searchInput" placeholder="Search facilities...">
+                            </div>
+                        </div>
+                        
+                        <!-- Facilities Table -->
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Facility Name</th>
+                                        <th>Type</th>
+                                        <th>Address</th>
+                                        <th>Contact</th>
+                                        <th>Capacity</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="facilitiesTable">
+                                    <!-- Facilities data will be loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Facility Modal -->
+    <div class="modal fade" id="editFacilityModal" tabindex="-1" aria-labelledby="editFacilityModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editFacilityModalLabel">Edit Health Facility</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editFacilityForm">
+                        <input type="hidden" id="edit_facility_id">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="edit_facility_name" class="form-label">Facility Name</label>
+                                <input type="text" class="form-control" id="edit_facility_name" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="edit_facility_type" class="form-label">Facility Type</label>
+                                <select class="form-select" id="edit_facility_type" required>
+                                    <option value="Hospital">Hospital</option>
+                                    <option value="Clinic">Clinic</option>
+                                    <option value="Vaccination Center">Vaccination Center</option>
+                                    <option value="Testing Center">Testing Center</option>
+                                    <option value="Quarantine Center">Quarantine Center</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label for="edit_address" class="form-label">Address</label>
+                                <textarea class="form-control" id="edit_address" rows="2" required></textarea>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label for="edit_contact_number" class="form-label">Contact Number</label>
+                                <input type="text" class="form-control" id="edit_contact_number">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="edit_email" class="form-label">Email</label>
+                                <input type="email" class="form-control" id="edit_email">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="edit_capacity" class="form-label">Capacity</label>
+                                <input type="number" class="form-control" id="edit_capacity" min="0">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label for="edit_status" class="form-label">Status</label>
+                                <select class="form-select" id="edit_status">
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                    <option value="under_maintenance">Under Maintenance</option>
+                                </select>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveFacilityChanges">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/scripts.js"></script>
+    <script src="js/health-facilities.js"></script>
+</body>
+</html>

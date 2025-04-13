@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supply Management | Pandemic Resilience System</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#">Pandemic Resilience System</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="index.html">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="health-facilities.html">Health Facilities</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="supply-management.html">Supply Management</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" id="logoutBtn">Logout</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card shadow">
+                    <div class="card-body">
+                        <h3 class="card-title">Supply Inventory Management</h3>
+                        <p class="card-text">Manage pandemic-related supplies and inventory.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card shadow">
+                    <div class="card-body">
+                        <h5 class="card-title">Add New Inventory Item</h5>
+                        <form id="inventoryForm">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="item_name" class="form-label">Item Name</label>
+                                    <input type="text" class="form-control" id="item_name" required>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="item_type" class="form-label">Item Type</label>
+                                    <select class="form-select" id="item_type" required>
+                                        <option value="">Select type</option>
+                                        <option value="vaccine">Vaccine</option>
+                                        <option value="medical_supply">Medical Supply</option>
+                                        <option value="ppe">PPE</option>
+                                        <option value="equipment">Equipment</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <label for="quantity" class="form-label">Quantity</label>
+                                    <input type="number" class="form-control" id="quantity" min="0" required>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label for="location" class="form-label">Location</label>
+                                    <input type="text" class="form-control" id="location">
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label for="batch_number" class="form-label">Batch Number</label>
+                                    <input type="text" class="form-control" id="batch_number">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="expiration_date" class="form-label">Expiration Date</label>
+                                    <input type="date" class="form-control" id="expiration_date">
+                                </div>
+                                <div class="col-md-6 mb-3 d-flex align-items-end">
+                                    <button type="submit" class="btn btn-primary w-100">Add Item</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card shadow">
+                    <div class="card-body">
+                        <h5 class="card-title">Current Inventory</h5>
+                        
+                        <!-- Filters -->
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <select class="form-select" id="typeFilter">
+                                    <option value="">All Item Types</option>
+                                    <option value="vaccine">Vaccine</option>
+                                    <option value="medical_supply">Medical Supply</option>
+                                    <option value="ppe">PPE</option>
+                                    <option value="equipment">Equipment</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <input type="text" class="form-control" id="locationFilter" placeholder="Filter by location...">
+                            </div>
+                            <div class="col-md-4">
+                                <input type="text" class="form-control" id="searchInput" placeholder="Search items...">
+                            </div>
+                        </div>
+                        
+                        <!-- Inventory Table -->
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Item Name</th>
+                                        <th>Type</th>
+                                        <th>Quantity</th>
+                                        <th>Location</th>
+                                        <th>Batch #</th>
+                                        <th>Expiration</th>
+                                        <th>Last Updated</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="inventoryTable">
+                                    <!-- Inventory data will be loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Inventory Modal -->
+    <div class="modal fade" id="editInventoryModal" tabindex="-1" aria-labelledby="editInventoryModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editInventoryModalLabel">Edit Inventory Item</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editInventoryForm">
+                        <input type="hidden" id="edit_inventory_id">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="edit_item_name" class="form-label">Item Name</label>
+                                <input type="text" class="form-control" id="edit_item_name" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="edit_item_type" class="form-label">Item Type</label>
+                                <select class="form-select" id="edit_item_type" required>
+                                    <option value="vaccine">Vaccine</option>
+                                    <option value="medical_supply">Medical Supply</option>
+                                    <option value="ppe">PPE</option>
+                                    <option value="equipment">Equipment</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label for="edit_quantity" class="form-label">Quantity</label>
+                                <input type="number" class="form-control" id="edit_quantity" min="0" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="edit_location" class="form-label">Location</label>
+                                <input type="text" class="form-control" id="edit_location">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="edit_batch_number" class="form-label">Batch Number</label>
+                                <input type="text" class="form-control" id="edit_batch_number">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label for="edit_expiration_date" class="form-label">Expiration Date</label>
+                                <input type="date" class="form-control" id="edit_expiration_date">
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveInventoryChanges">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/scripts.js"></script>
+    <script src="js/supply-management.js"></script>
+</body>
+</html>

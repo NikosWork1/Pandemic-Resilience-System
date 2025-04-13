@@ -3,6 +3,11 @@
 require 'db.php';
 require 'jwt_handler.php';
 
+// Error handling settings
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+error_reporting(E_ALL);
+
 // Set content type to JSON
 header('Content-Type: application/json');
 
@@ -60,41 +65,61 @@ switch ($endpoint) {
     case 'login':
         // Handle login requests
         if ($method === 'POST') {
-            $data = json_decode(file_get_contents("php://input"), true);
-            
-            // Validate required fields
-            if (!isset($data['email']) || !isset($data['password'])) {
-                http_response_code(400);
-                echo json_encode(['error' => 'Email and password are required']);
-                exit;
-            }
-            
-            // Prepare statement to prevent SQL injection
-            $stmt = $conn->prepare("SELECT user_id, password_hash FROM users WHERE email = ?");
-            $stmt->bind_param("s", $data['email']);
-            $stmt->execute();
-            $result = $stmt->get_result();
-            
-            if ($result->num_rows === 0) {
-                http_response_code(401);
-                echo json_encode(['error' => 'Invalid credentials']);
-                exit;
-            }
-            
-            $user = $result->fetch_assoc();
-            
-            // Verify password
-            if (password_verify($data['password'], $user['password_hash']) || hash('sha256', $data['password']) === $user['password_hash']) {
-                // Generate JWT token
-                $token = createJWT($user['user_id']);
+            try {
+                // Get request body
+                $data = json_decode(file_get_contents("php://input"), true);
                 
-                // Log the login action
-                log_action($user['user_id'], 'LOGIN', 'USER', $user['user_id']);
+                // Validate required fields
+                if (!isset($data['email']) || !isset($data['password'])) {
+                    http_response_code(400);
+                    echo json_encode(['error' => 'Email and password are required']);
+                    exit;
+                }
                 
-                echo json_encode(['token' => $token]);
-            } else {
-                http_response_code(401);
-                echo json_encode(['error' => 'Invalid credentials']);
+                // Make sure database connection is valid
+                if ($conn->connect_error) {
+                    http_response_code(500);
+                    echo json_encode(['error' => 'Database connection failed']);
+                    exit;
+                }
+                
+                // Prepare statement to prevent SQL injection
+                $stmt = $conn->prepare("SELECT user_id, password_hash FROM users WHERE email = ?");
+                
+                if (!$stmt) {
+                    http_response_code(500);
+                    echo json_encode(['error' => 'Database query preparation failed: ' . $conn->error]);
+                    exit;
+                }
+                
+                $stmt->bind_param("s", $data['email']);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                
+                if ($result->num_rows === 0) {
+                    http_response_code(401);
+                    echo json_encode(['error' => 'Invalid credentials']);
+                    exit;
+                }
+                
+                $user = $result->fetch_assoc();
+                
+                // Verify password
+                if (password_verify($data['password'], $user['password_hash']) || hash('sha256', $data['password']) === $user['password_hash']) {
+                    // Generate JWT token
+                    $token = createJWT($user['user_id']);
+                    
+                    // Log the login action
+                    log_action($user['user_id'], 'LOGIN', 'USER', $user['user_id']);
+                    
+                    echo json_encode(['token' => $token]);
+                } else {
+                    http_response_code(401);
+                    echo json_encode(['error' => 'Invalid credentials']);
+                }
+            } catch (Exception $e) {
+                http_response_code(500);
+                echo json_encode(['error' => 'Server error: ' . $e->getMessage()]);
             }
         } else {
             http_response_code(405);
@@ -375,6 +400,488 @@ switch ($endpoint) {
             http_response_code(405);
             echo json_encode(['error' => 'Method not allowed']);
         }
+        break;
+        
+    case 'health-facilities':
+        // Handle health facility-related requests
+        $id = $request[1] ?? null;
+        
+        if ($method === 'GET') {
+            // Authentication required for all health facility requests
+            $auth_user_id = authenticate();
+            
+            if ($id) {
+                // Get specific health facility
+                $stmt = $conn->prepare("SELECT * FROM health_facilities WHERE facility_id = ?");
+                $stmt->bind_param("i", $id);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                
+                if ($result->num_rows === 0) {
+                    http_response_code(404);
+                    echo json_encode(['error' => 'Health facility not found']);
+                    exit;
+                }
+                
+                $facility = $result->fetch_assoc();
+                echo json_encode($facility);
+            } else {
+                // Get all health facilities
+                $result = $conn->query("SELECT * FROM health_facilities ORDER BY facility_name ASC");
+                
+                $facilities = [];
+                while ($row = $result->fetch_assoc()) {
+                    $facilities[] = $row;
+                }
+                
+                echo json_encode($facilities);
+            }
+        } elseif ($method === 'POST') {
+            // Create new health facility - requires authentication
+            $auth_user_id = authenticate();
+            
+            // Check user role (only Gov Officials can add health facilities)
+            $stmt = $conn->prepare("SELECT role_id FROM users WHERE user_id = ?");
+            $stmt->bind_param("i", $auth_user_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $user = $result->fetch_assoc();
+            
+            if ($user['role_id'] != 1) {  // 1=Gov Official
+                http_response_code(403);
+                echo json_encode(['error' => 'You do not have permission to add health facilities']);
+                exit;
+            }
+            
+            $data = json_decode(file_get_contents("php://input"), true);
+            
+            // Validate required fields
+            if (!isset($data['facility_name']) || !isset($data['facility_type']) || !isset($data['address'])) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Missing required fields']);
+                exit;
+            }
+            
+            // Insert new health facility
+            $stmt = $conn->prepare("INSERT INTO health_facilities 
+                                  (facility_name, facility_type, address, contact_number, email, capacity, status) 
+                                  VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("sssssss", 
+                             $data['facility_name'], 
+                             $data['facility_type'], 
+                             $data['address'], 
+                             $data['contact_number'], 
+                             $data['email'], 
+                             $data['capacity'], 
+                             $data['status']);
+            
+            if ($stmt->execute()) {
+                $facility_id = $conn->insert_id;
+                
+                // Log the action
+                log_action($auth_user_id, 'CREATE', 'HEALTH_FACILITY', $facility_id);
+                
+                http_response_code(201);
+                echo json_encode([
+                    'status' => 'success',
+                    'message' => 'Health facility created successfully',
+                    'facility_id' => $facility_id
+                ]);
+            } else {
+                http_response_code(500);
+                echo json_encode(['error' => 'Failed to create health facility: ' . $conn->error]);
+            }
+        } elseif ($method === 'PUT') {
+            // Update existing health facility
+            if (!$id) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Facility ID is required']);
+                exit;
+            }
+            
+            $auth_user_id = authenticate();
+            
+            // Check user role (only Gov Officials can update health facilities)
+            $stmt = $conn->prepare("SELECT role_id FROM users WHERE user_id = ?");
+            $stmt->bind_param("i", $auth_user_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $user = $result->fetch_assoc();
+            
+            if ($user['role_id'] != 1) {  // 1=Gov Official
+                http_response_code(403);
+                echo json_encode(['error' => 'You do not have permission to update health facilities']);
+                exit;
+            }
+            
+            // Check if facility exists
+            $stmt = $conn->prepare("SELECT * FROM health_facilities WHERE facility_id = ?");
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            
+            if ($result->num_rows === 0) {
+                http_response_code(404);
+                echo json_encode(['error' => 'Health facility not found']);
+                exit;
+            }
+            
+            $data = json_decode(file_get_contents("php://input"), true);
+            
+            // Validate required fields
+            if (!isset($data['facility_name']) || !isset($data['facility_type']) || !isset($data['address'])) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Missing required fields']);
+                exit;
+            }
+            
+            // Update health facility
+            $stmt = $conn->prepare("UPDATE health_facilities 
+                                  SET facility_name = ?, facility_type = ?, address = ?, 
+                                      contact_number = ?, email = ?, capacity = ?, status = ? 
+                                  WHERE facility_id = ?");
+            $stmt->bind_param("sssssssi", 
+                             $data['facility_name'], 
+                             $data['facility_type'], 
+                             $data['address'], 
+                             $data['contact_number'], 
+                             $data['email'], 
+                             $data['capacity'], 
+                             $data['status'],
+                             $id);
+            
+            if ($stmt->execute()) {
+                // Log the action
+                log_action($auth_user_id, 'UPDATE', 'HEALTH_FACILITY', $id);
+                
+                echo json_encode([
+                    'status' => 'success',
+                    'message' => 'Health facility updated successfully'
+                ]);
+            } else {
+                http_response_code(500);
+                echo json_encode(['error' => 'Failed to update health facility: ' . $conn->error]);
+            }
+        } elseif ($method === 'DELETE') {
+            // Delete health facility
+            if (!$id) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Facility ID is required']);
+                exit;
+            }
+            
+            $auth_user_id = authenticate();
+            
+            // Check user role (only Gov Officials can delete health facilities)
+            $stmt = $conn->prepare("SELECT role_id FROM users WHERE user_id = ?");
+            $stmt->bind_param("i", $auth_user_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $user = $result->fetch_assoc();
+            
+            if ($user['role_id'] != 1) {  // 1=Gov Official
+                http_response_code(403);
+                echo json_encode(['error' => 'You do not have permission to delete health facilities']);
+                exit;
+            }
+            
+            // Check if facility exists
+            $stmt = $conn->prepare("SELECT * FROM health_facilities WHERE facility_id = ?");
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            
+            if ($result->num_rows === 0) {
+                http_response_code(404);
+                echo json_encode(['error' => 'Health facility not found']);
+                exit;
+            }
+            
+            // Delete facility
+            $stmt = $conn->prepare("DELETE FROM health_facilities WHERE facility_id = ?");
+            $stmt->bind_param("i", $id);
+            
+            if ($stmt->execute()) {
+                // Log the action
+                log_action($auth_user_id, 'DELETE', 'HEALTH_FACILITY', $id);
+                
+                echo json_encode([
+                    'status' => 'success',
+                    'message' => 'Health facility deleted successfully'
+                ]);
+            } else {
+                http_response_code(500);
+                echo json_encode(['error' => 'Failed to delete health facility: ' . $conn->error]);
+            }
+        } else {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+        }
+        break;
+
+    case 'supply-inventory':
+        // Handle supply inventory-related requests
+        $id = $request[1] ?? null;
+        
+        if ($method === 'GET') {
+            // Authentication required for all inventory requests
+            $auth_user_id = authenticate();
+            
+            if ($id) {
+                // Get specific inventory item
+                $stmt = $conn->prepare("SELECT * FROM supply_inventory WHERE inventory_id = ?");
+                $stmt->bind_param("i", $id);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                
+                if ($result->num_rows === 0) {
+                    http_response_code(404);
+                    echo json_encode(['error' => 'Inventory item not found']);
+                    exit;
+                }
+                
+                $item = $result->fetch_assoc();
+                echo json_encode($item);
+            } else {
+                // Get all inventory items with optional filtering
+                $query = "SELECT si.*, u.full_name as updated_by_name 
+                         FROM supply_inventory si
+                         LEFT JOIN users u ON si.updated_by = u.user_id";
+                
+                // Add filters if provided
+                $where_clauses = [];
+                $params = [];
+                $types = "";
+                
+                if (isset($_GET['item_type'])) {
+                    $where_clauses[] = "si.item_type = ?";
+                    $params[] = $_GET['item_type'];
+                    $types .= "s";
+                }
+                
+                if (isset($_GET['location'])) {
+                    $where_clauses[] = "si.location LIKE ?";
+                    $params[] = "%" . $_GET['location'] . "%";
+                    $types .= "s";
+                }
+                
+                if (!empty($where_clauses)) {
+                    $query .= " WHERE " . implode(" AND ", $where_clauses);
+                }
+                
+                $query .= " ORDER BY si.last_updated DESC";
+                
+                // Prepare and execute the query with potential parameters
+                $stmt = $conn->prepare($query);
+                if (!empty($params)) {
+                    $stmt->bind_param($types, ...$params);
+                }
+                $stmt->execute();
+                $result = $stmt->get_result();
+                
+                $items = [];
+                while ($row = $result->fetch_assoc()) {
+                    $items[] = $row;
+                }
+                
+                echo json_encode($items);
+            }
+        } elseif ($method === 'POST') {
+            // Create new inventory item - requires authentication
+            $auth_user_id = authenticate();
+            
+            // Check user role (only Gov Officials and Merchants can add inventory)
+            $stmt = $conn->prepare("SELECT role_id FROM users WHERE user_id = ?");
+            $stmt->bind_param("i", $auth_user_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $user = $result->fetch_assoc();
+            
+            if (!in_array($user['role_id'], [1, 2])) {  // 1=Gov Official, 2=Merchant
+                http_response_code(403);
+                echo json_encode(['error' => 'You do not have permission to add inventory items']);
+                exit;
+            }
+            
+            $data = json_decode(file_get_contents("php://input"), true);
+            
+            // Validate required fields
+            if (!isset($data['item_name']) || !isset($data['item_type']) || !isset($data['quantity'])) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Missing required fields']);
+                exit;
+            }
+            
+            // Insert new inventory item
+            $stmt = $conn->prepare("INSERT INTO supply_inventory 
+                                  (item_name, item_type, quantity, location, batch_number, expiration_date, updated_by) 
+                                  VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("ssisssi", 
+                             $data['item_name'], 
+                             $data['item_type'], 
+                             $data['quantity'], 
+                             $data['location'], 
+                             $data['batch_number'], 
+                             $data['expiration_date'], 
+                             $auth_user_id);
+            
+            if ($stmt->execute()) {
+                $inventory_id = $conn->insert_id;
+                
+                // Log the action
+                log_action($auth_user_id, 'CREATE', 'SUPPLY_INVENTORY', $inventory_id);
+                
+                http_response_code(201);
+                echo json_encode([
+                    'status' => 'success',
+                    'message' => 'Inventory item created successfully',
+                    'inventory_id' => $inventory_id
+                ]);
+            } else {
+                http_response_code(500);
+                echo json_encode(['error' => 'Failed to create inventory item: ' . $conn->error]);
+            }
+        } elseif ($method === 'PUT') {
+            // Update existing inventory item
+            if (!$id) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Inventory ID is required']);
+                exit;
+            }
+            
+            $auth_user_id = authenticate();
+            
+            // Check user role (only Gov Officials and Merchants can update inventory)
+            $stmt = $conn->prepare("SELECT role_id FROM users WHERE user_id = ?");
+            $stmt->bind_param("i", $auth_user_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $user = $result->fetch_assoc();
+            
+            if (!in_array($user['role_id'], [1, 2])) {  // 1=Gov Official, 2=Merchant
+                http_response_code(403);
+                echo json_encode(['error' => 'You do not have permission to update inventory items']);
+                exit;
+            }
+            
+            // Check if inventory item exists
+            $stmt = $conn->prepare("SELECT * FROM supply_inventory WHERE inventory_id = ?");
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            
+            if ($result->num_rows === 0) {
+                http_response_code(404);
+                echo json_encode(['error' => 'Inventory item not found']);
+                exit;
+            }
+            
+            $data = json_decode(file_get_contents("php://input"), true);
+            
+            // Validate required fields
+            if (!isset($data['item_name']) || !isset($data['item_type']) || !isset($data['quantity'])) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Missing required fields']);
+                exit;
+            }
+            
+            // Update inventory item
+            $stmt = $conn->prepare("UPDATE supply_inventory 
+                                  SET item_name = ?, item_type = ?, quantity = ?, location = ?, 
+                                      batch_number = ?, expiration_date = ?, updated_by = ? 
+                                  WHERE inventory_id = ?");
+            $stmt->bind_param("ssisssii", 
+                             $data['item_name'], 
+                             $data['item_type'], 
+                             $data['quantity'], 
+                             $data['location'], 
+                             $data['batch_number'], 
+                             $data['expiration_date'], 
+                             $auth_user_id,
+                             $id);
+            
+            if ($stmt->execute()) {
+                // Log the action
+                log_action($auth_user_id, 'UPDATE', 'SUPPLY_INVENTORY', $id);
+                
+                echo json_encode([
+                    'status' => 'success',
+                    'message' => 'Inventory item updated successfully'
+                ]);
+            } else
+            if ($stmt->execute()) {
+                // Log the action
+                log_action($auth_user_id, 'UPDATE', 'SUPPLY_INVENTORY', $id);
+                
+                echo json_encode([
+                    'status' => 'success',
+                    'message' => 'Inventory item updated successfully'
+                ]);
+            } else {
+                http_response_code(500);
+                echo json_encode(['error' => 'Failed to update inventory item: ' . $conn->error]);
+            }
+        } elseif ($method === 'DELETE') {
+            // Delete inventory item
+            if (!$id) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Inventory ID is required']);
+                exit;
+            }
+            
+            $auth_user_id = authenticate();
+            
+            // Check user role (only Gov Officials can delete inventory)
+            $stmt = $conn->prepare("SELECT role_id FROM users WHERE user_id = ?");
+            $stmt->bind_param("i", $auth_user_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $user = $result->fetch_assoc();
+            
+            if ($user['role_id'] != 1) {  // 1=Gov Official
+                http_response_code(403);
+                echo json_encode(['error' => 'You do not have permission to delete inventory items']);
+                exit;
+            }
+            
+            // Check if inventory item exists
+            $stmt = $conn->prepare("SELECT * FROM supply_inventory WHERE inventory_id = ?");
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            
+            if ($result->num_rows === 0) {
+                http_response_code(404);
+                echo json_encode(['error' => 'Inventory item not found']);
+                exit;
+            }
+            
+            // Delete inventory item
+            $stmt = $conn->prepare("DELETE FROM supply_inventory WHERE inventory_id = ?");
+            $stmt->bind_param("i", $id);
+            
+            if ($stmt->execute()) {
+                // Log the action
+                log_action($auth_user_id, 'DELETE', 'SUPPLY_INVENTORY', $id);
+                
+                echo json_encode([
+                    'status' => 'success',
+                    'message' => 'Inventory item deleted successfully'
+                ]);
+            } else {
+                http_response_code(500);
+                echo json_encode(['error' => 'Failed to delete inventory item: ' . $conn->error]);
+            }
+        } else {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+        }
+        break;
+        
+    case 'test':
+        // A simple test endpoint to verify API functionality
+        header('Content-Type: application/json');
+        echo json_encode(['status' => 'success', 'message' => 'API is working correctly']);
         break;
         
     default:
