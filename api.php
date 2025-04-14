@@ -1,4 +1,7 @@
 <?php
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 // Include required files
 require 'db.php';
 require 'jwt_handler.php';
@@ -28,10 +31,14 @@ $request_uri = $_SERVER['REQUEST_URI'];
 $base_path = '/prs/api.php';
 
 // Extract path info (remove base path)
+// Modify path extraction logic
 if (isset($_SERVER['PATH_INFO'])) {
     $path_info = $_SERVER['PATH_INFO'];
 } else {
-    $path_info = str_replace($base_path, '', $request_uri);
+    // Remove any leading 'api/' from the request URI
+    $path_info = preg_replace('/^\/api\//', '', 
+        str_replace($base_path, '', $request_uri)
+    );
 }
 $request = explode('/', trim($path_info, '/'));
 
@@ -183,93 +190,146 @@ switch ($endpoint) {
         }
         break;
 
-    case 'forgot-password':
-        // Handle forgot password requests
-        if ($method === 'POST') {
-            try {
-                // Get request body
-                $data = json_decode(file_get_contents("php://input"), true);
-                
-                // Validate required fields
-                if (!isset($data['email'])) {
-                    http_response_code(400);
-                    echo json_encode(['error' => 'Email is required']);
-                    exit;
-                }
-                
-                // Make sure database connection is valid
-                if ($conn->connect_error) {
+        case 'forgot-password':
+            // Handle forgot password requests
+            if ($method === 'POST') {
+                try {
+                    // Get raw input
+                    $rawInput = file_get_contents('php://input');
+                    error_log("Raw Input: " . $rawInput);
+        
+                    // Parse JSON input
+                    $data = json_decode($rawInput, true);
+        
+                    // Check for JSON parsing errors
+                    if (json_last_error() !== JSON_ERROR_NONE) {
+                        error_log("JSON Parsing Error: " . json_last_error_msg());
+                        http_response_code(400);
+                        echo json_encode([
+                            'status' => 'error',
+                            'message' => 'Invalid JSON input',
+                            'error_details' => json_last_error_msg()
+                        ]);
+                        exit;
+                    }
+        
+                    // Validate input
+                    if (!isset($data['email']) || !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
+                        http_response_code(400);
+                        echo json_encode([
+                            'status' => 'error',
+                            'message' => 'Invalid or missing email address'
+                        ]);
+                        exit;
+                    }
+        
+                    // Include mail sender functions
+                    require_once 'mail_sender.php';
+                    
+                    // Make sure database connection is valid
+                    if ($conn->connect_error) {
+                        http_response_code(500);
+                        echo json_encode([
+                            'status' => 'error',
+                            'message' => 'Database connection failed'
+                        ]);
+                        exit;
+                    }
+                    
+                    // Check if email exists
+                    $stmt = $conn->prepare("SELECT user_id, email, full_name FROM users WHERE email = ?");
+                    $stmt->bind_param("s", $data['email']);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    
+                    if ($result->num_rows === 0) {
+                        // Don't reveal that email doesn't exist for security reasons
+                        echo json_encode([
+                            'status' => 'success',
+                            'message' => 'If this email is registered, password reset instructions will be sent.'
+                        ]);
+                        exit;
+                    }
+                    
+                    $user = $result->fetch_assoc();
+                    
+                    // Generate a reset token
+                    $token = generateResetToken();
+                    $expiry = date('Y-m-d H:i:s', strtotime('+1 hour'));
+                    
+                    // Check if a reset request already exists for this user
+                    $stmt = $conn->prepare("SELECT * FROM password_reset_tokens WHERE user_id = ?");
+                    $stmt->bind_param("i", $user['user_id']);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    
+                    if ($result->num_rows > 0) {
+                        // Update existing token
+                        $stmt = $conn->prepare("UPDATE password_reset_tokens SET token = ?, expires_at = ? WHERE user_id = ?");
+                        $stmt->bind_param("ssi", $token, $expiry, $user['user_id']);
+                    } else {
+                        // Insert new token
+                        $stmt = $conn->prepare("INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)");
+                        $stmt->bind_param("iss", $user['user_id'], $token, $expiry);
+                    }
+                    
+                    if ($stmt->execute()) {
+                        // Log the action
+                        log_action($user['user_id'], 'PASSWORD_RESET_REQUEST', 'USER', $user['user_id']);
+                        
+                        // Build the reset link for debug purposes
+                        $resetLink = "http://{$_SERVER['HTTP_HOST']}/prs/reset-password.html?token=$token";
+                        
+                        // Send the email with the reset link
+                        $emailSent = sendPasswordResetEmail($user['email'], $token, $user['full_name']);
+                        
+                        // Log the email sending result for debugging
+                        error_log("Email sending to {$user['email']} result: " . ($emailSent ? "Success" : "Failed"));
+                        
+                        if ($emailSent) {
+                            // Email sent successfully
+                            echo json_encode([
+                                'status' => 'success',
+                                'message' => 'Password reset instructions have been sent to your email.'
+                            ]);
+                        } else {
+                            // Email sending failed but token was created
+                            // Include the debug link in the response
+                            echo json_encode([
+                                'status' => 'success',
+                                'message' => 'Password reset instructions have been sent to your email.',
+                                'debug_link' => $resetLink, // This will be shown to the user in development mode
+                                'debug_info' => 'Email could not be sent, but reset token was created. Using debug link instead.'
+                            ]);
+                        }
+                    } else {
+                        http_response_code(500);
+                        echo json_encode([
+                            'status' => 'error',
+                            'message' => 'Failed to process password reset request',
+                            'error_details' => $conn->error
+                        ]);
+                    }
+                } catch (Exception $e) {
+                    // More comprehensive error logging
+                    error_log("Forgot Password Error: " . $e->getMessage());
+                    error_log("Trace: " . $e->getTraceAsString());
+        
                     http_response_code(500);
-                    echo json_encode(['error' => 'Database connection failed']);
-                    exit;
-                }
-                
-                // Check if email exists
-                $stmt = $conn->prepare("SELECT user_id, email FROM users WHERE email = ?");
-                $stmt->bind_param("s", $data['email']);
-                $stmt->execute();
-                $result = $stmt->get_result();
-                
-                if ($result->num_rows === 0) {
-                    // Don't reveal that email doesn't exist for security reasons
-                    // Instead, return a generic success message
                     echo json_encode([
-                        'status' => 'success',
-                        'message' => 'If this email is registered, password reset instructions will be sent.'
+                        'status' => 'error',
+                        'message' => 'An unexpected error occurred',
+                        'error_details' => $e->getMessage()
                     ]);
-                    exit;
                 }
-                
-                $user = $result->fetch_assoc();
-                
-                // Generate a reset token
-                $token = generateResetToken();
-                $expiry = date('Y-m-d H:i:s', strtotime('+1 hour'));
-                
-                // Check if a reset request already exists for this user
-                $stmt = $conn->prepare("SELECT * FROM password_reset_tokens WHERE user_id = ?");
-                $stmt->bind_param("i", $user['user_id']);
-                $stmt->execute();
-                $result = $stmt->get_result();
-                
-                if ($result->num_rows > 0) {
-                    // Update existing token
-                    $stmt = $conn->prepare("UPDATE password_reset_tokens SET token = ?, expires_at = ? WHERE user_id = ?");
-                    $stmt->bind_param("ssi", $token, $expiry, $user['user_id']);
-                } else {
-                    // Insert new token
-                    $stmt = $conn->prepare("INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)");
-                    $stmt->bind_param("iss", $user['user_id'], $token, $expiry);
-                }
-                
-                if ($stmt->execute()) {
-                    // Log the action
-                    log_action($user['user_id'], 'PASSWORD_RESET_REQUEST', 'USER', $user['user_id']);
-                    
-                    // In a production environment, you would send an email here
-                    // For this exercise, we'll just return the reset link in the response
-                    // (in a real app, never do this for security reasons)
-                    
-                    $resetLink = "http://{$_SERVER['HTTP_HOST']}/prs/reset-password.html?token=$token";
-                    
-                    echo json_encode([
-                        'status' => 'success',
-                        'message' => 'Password reset instructions have been sent to your email.',
-                        'debug_link' => $resetLink // Remove this in production
-                    ]);
-                } else {
-                    http_response_code(500);
-                    echo json_encode(['error' => 'Failed to process password reset request']);
-                }
-            } catch (Exception $e) {
-                http_response_code(500);
-                echo json_encode(['error' => 'Server error: ' . $e->getMessage()]);
+            } else {
+                http_response_code(405);
+                echo json_encode([
+                    'status' => 'error',
+                    'message' => 'Method not allowed'
+                ]);
             }
-        } else {
-            http_response_code(405);
-            echo json_encode(['error' => 'Method not allowed']);
-        }
-        break;
+            break;
         
     case 'reset-password':
         // Handle password reset
