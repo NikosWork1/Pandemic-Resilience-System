@@ -60,19 +60,140 @@ function authenticate() {
     return $user_id;
 }
 
+// Function to validate password strength
+function validatePasswordStrength($password) {
+    // Password must be at least 8 characters
+    if (strlen($password) < 8) {
+        return false;
+    }
+    
+    // Password must contain at least one uppercase letter
+    if (!preg_match('/[A-Z]/', $password)) {
+        return false;
+    }
+    
+    // Password must contain at least one lowercase letter
+    if (!preg_match('/[a-z]/', $password)) {
+        return false;
+    }
+    
+    // Password must contain at least one number
+    if (!preg_match('/[0-9]/', $password)) {
+        return false;
+    }
+    
+    // Password must contain at least one special character
+    if (!preg_match('/[^A-Za-z0-9]/', $password)) {
+        return false;
+    }
+    
+    return true;
+}
+
+// Function to generate a random token
+function generateResetToken() {
+    return bin2hex(random_bytes(32));
+}
+
 // Handle different API endpoints
 switch ($endpoint) {
     case 'login':
         // Handle login requests
         if ($method === 'POST') {
             try {
+                // Log raw input for debugging
+                error_log("Login Request Raw Input: " . file_get_contents("php://input"));
+                
+                // Get request body
+                $data = json_decode(file_get_contents("php://input"), true);
+                
+                // Log parsed data
+                error_log("Parsed Login Data: " . print_r($data, true));
+                
+                // Validate required fields
+                if (!isset($data['email']) || !isset($data['password'])) {
+                    error_log("Login Error: Missing email or password");
+                    http_response_code(400);
+                    echo json_encode(['error' => 'Email and password are required']);
+                    exit;
+                }
+                
+                // Additional debugging for database connection
+                if ($conn->connect_error) {
+                    error_log("Database Connection Error: " . $conn->connect_error);
+                    http_response_code(500);
+                    echo json_encode(['error' => 'Database connection failed']);
+                    exit;
+                }
+                
+                // Prepare statement to prevent SQL injection
+                $stmt = $conn->prepare("SELECT user_id, password_hash FROM users WHERE email = ?");
+                
+                // Log statement preparation errors
+                if (!$stmt) {
+                    error_log("Statement Preparation Error: " . $conn->error);
+                    http_response_code(500);
+                    echo json_encode(['error' => 'Database query preparation failed: ' . $conn->error]);
+                    exit;
+                }
+                
+                $stmt->bind_param("s", $data['email']);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                
+                // Log query execution details
+                error_log("Login Query Result Rows: " . $result->num_rows);
+                
+                if ($result->num_rows === 0) {
+                    error_log("Login Attempt: User not found - " . $data['email']);
+                    http_response_code(401);
+                    echo json_encode(['error' => 'Invalid credentials']);
+                    exit;
+                }
+                
+                $user = $result->fetch_assoc();
+                
+                // Verify password with detailed logging
+                $passwordVerified = password_verify($data['password'], $user['password_hash']);
+                
+                error_log("Password Verification Result: " . ($passwordVerified ? 'Success' : 'Failed'));
+                
+                if ($passwordVerified) {
+                    // Generate JWT token
+                    $token = createJWT($user['user_id']);
+                    
+                    // Log successful login
+                    log_action($user['user_id'], 'LOGIN', 'USER', $user['user_id']);
+                    
+                    echo json_encode(['token' => $token]);
+                } else {
+                    error_log("Login Attempt: Invalid password for user - " . $data['email']);
+                    http_response_code(401);
+                    echo json_encode(['error' => 'Invalid credentials']);
+                }
+            } catch (Exception $e) {
+                // Log any unexpected errors
+                error_log("Login Exception: " . $e->getMessage());
+                http_response_code(500);
+                echo json_encode(['error' => 'Server error: ' . $e->getMessage()]);
+            }
+        } else {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+        }
+        break;
+
+    case 'forgot-password':
+        // Handle forgot password requests
+        if ($method === 'POST') {
+            try {
                 // Get request body
                 $data = json_decode(file_get_contents("php://input"), true);
                 
                 // Validate required fields
-                if (!isset($data['email']) || !isset($data['password'])) {
+                if (!isset($data['email'])) {
                     http_response_code(400);
-                    echo json_encode(['error' => 'Email and password are required']);
+                    echo json_encode(['error' => 'Email is required']);
                     exit;
                 }
                 
@@ -83,39 +204,142 @@ switch ($endpoint) {
                     exit;
                 }
                 
-                // Prepare statement to prevent SQL injection
-                $stmt = $conn->prepare("SELECT user_id, password_hash FROM users WHERE email = ?");
-                
-                if (!$stmt) {
-                    http_response_code(500);
-                    echo json_encode(['error' => 'Database query preparation failed: ' . $conn->error]);
-                    exit;
-                }
-                
+                // Check if email exists
+                $stmt = $conn->prepare("SELECT user_id, email FROM users WHERE email = ?");
                 $stmt->bind_param("s", $data['email']);
                 $stmt->execute();
                 $result = $stmt->get_result();
                 
                 if ($result->num_rows === 0) {
-                    http_response_code(401);
-                    echo json_encode(['error' => 'Invalid credentials']);
+                    // Don't reveal that email doesn't exist for security reasons
+                    // Instead, return a generic success message
+                    echo json_encode([
+                        'status' => 'success',
+                        'message' => 'If this email is registered, password reset instructions will be sent.'
+                    ]);
                     exit;
                 }
                 
                 $user = $result->fetch_assoc();
                 
-                // Verify password
-                if (password_verify($data['password'], $user['password_hash']) || hash('sha256', $data['password']) === $user['password_hash']) {
-                    // Generate JWT token
-                    $token = createJWT($user['user_id']);
-                    
-                    // Log the login action
-                    log_action($user['user_id'], 'LOGIN', 'USER', $user['user_id']);
-                    
-                    echo json_encode(['token' => $token]);
+                // Generate a reset token
+                $token = generateResetToken();
+                $expiry = date('Y-m-d H:i:s', strtotime('+1 hour'));
+                
+                // Check if a reset request already exists for this user
+                $stmt = $conn->prepare("SELECT * FROM password_reset_tokens WHERE user_id = ?");
+                $stmt->bind_param("i", $user['user_id']);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                
+                if ($result->num_rows > 0) {
+                    // Update existing token
+                    $stmt = $conn->prepare("UPDATE password_reset_tokens SET token = ?, expires_at = ? WHERE user_id = ?");
+                    $stmt->bind_param("ssi", $token, $expiry, $user['user_id']);
                 } else {
-                    http_response_code(401);
-                    echo json_encode(['error' => 'Invalid credentials']);
+                    // Insert new token
+                    $stmt = $conn->prepare("INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)");
+                    $stmt->bind_param("iss", $user['user_id'], $token, $expiry);
+                }
+                
+                if ($stmt->execute()) {
+                    // Log the action
+                    log_action($user['user_id'], 'PASSWORD_RESET_REQUEST', 'USER', $user['user_id']);
+                    
+                    // In a production environment, you would send an email here
+                    // For this exercise, we'll just return the reset link in the response
+                    // (in a real app, never do this for security reasons)
+                    
+                    $resetLink = "http://{$_SERVER['HTTP_HOST']}/prs/reset-password.html?token=$token";
+                    
+                    echo json_encode([
+                        'status' => 'success',
+                        'message' => 'Password reset instructions have been sent to your email.',
+                        'debug_link' => $resetLink // Remove this in production
+                    ]);
+                } else {
+                    http_response_code(500);
+                    echo json_encode(['error' => 'Failed to process password reset request']);
+                }
+            } catch (Exception $e) {
+                http_response_code(500);
+                echo json_encode(['error' => 'Server error: ' . $e->getMessage()]);
+            }
+        } else {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+        }
+        break;
+        
+    case 'reset-password':
+        // Handle password reset
+        if ($method === 'POST') {
+            try {
+                // Get request body
+                $data = json_decode(file_get_contents("php://input"), true);
+                
+                // Validate required fields
+                if (!isset($data['token']) || !isset($data['password'])) {
+                    http_response_code(400);
+                    echo json_encode(['error' => 'Token and password are required']);
+                    exit;
+                }
+                
+                // Validate password strength
+                if (!validatePasswordStrength($data['password'])) {
+                    http_response_code(400);
+                    echo json_encode([
+                        'error' => 'Password must be at least 8 characters long and include uppercase, lowercase, number, and special character.'
+                    ]);
+                    exit;
+                }
+                
+                // Make sure database connection is valid
+                if ($conn->connect_error) {
+                    http_response_code(500);
+                    echo json_encode(['error' => 'Database connection failed']);
+                    exit;
+                }
+                
+               
+
+                #Let me continue with the rest of the API implementation:
+                $now = date('Y-m-d H:i:s');
+                $stmt = $conn->prepare("SELECT * FROM password_reset_tokens WHERE token = ? AND expires_at > ?");
+                $stmt->bind_param("ss", $data['token'], $now);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                
+                if ($result->num_rows === 0) {
+                    http_response_code(400);
+                    echo json_encode(['error' => 'Invalid or expired token. Please request a new password reset.']);
+                    exit;
+                }
+                
+                $tokenData = $result->fetch_assoc();
+                $user_id = $tokenData['user_id'];
+                
+                // Update user's password
+                $password_hash = password_hash($data['password'], PASSWORD_DEFAULT);
+                $stmt = $conn->prepare("UPDATE users SET password_hash = ? WHERE user_id = ?");
+                $stmt->bind_param("si", $password_hash, $user_id);
+                
+                if ($stmt->execute()) {
+                    // Delete the used token
+                    $stmt = $conn->prepare("DELETE FROM password_reset_tokens WHERE token = ?");
+                    $stmt->bind_param("s", $data['token']);
+                    $stmt->execute();
+                    
+                    // Log the action
+                    log_action($user_id, 'PASSWORD_RESET', 'USER', $user_id);
+                    
+                    echo json_encode([
+                        'status' => 'success',
+                        'message' => 'Password has been reset successfully.'
+                    ]);
+                } else {
+                    http_response_code(500);
+                    echo json_encode(['error' => 'Failed to reset password: ' . $conn->error]);
                 }
             } catch (Exception $e) {
                 http_response_code(500);
@@ -174,6 +398,15 @@ switch ($endpoint) {
             if (!isset($data['full_name']) || !isset($data['email']) || !isset($data['password']) || !isset($data['role_id'])) {
                 http_response_code(400);
                 echo json_encode(['error' => 'Missing required fields']);
+                exit;
+            }
+            
+            // Validate password strength
+            if (!validatePasswordStrength($data['password'])) {
+                http_response_code(400);
+                echo json_encode([
+                    'error' => 'Password must be at least 8 characters long and include uppercase, lowercase, number, and special character.'
+                ]);
                 exit;
             }
             
@@ -808,15 +1041,6 @@ switch ($endpoint) {
                     'status' => 'success',
                     'message' => 'Inventory item updated successfully'
                 ]);
-            } else
-            if ($stmt->execute()) {
-                // Log the action
-                log_action($auth_user_id, 'UPDATE', 'SUPPLY_INVENTORY', $id);
-                
-                echo json_encode([
-                    'status' => 'success',
-                    'message' => 'Inventory item updated successfully'
-                ]);
             } else {
                 http_response_code(500);
                 echo json_encode(['error' => 'Failed to update inventory item: ' . $conn->error]);
@@ -876,6 +1100,7 @@ switch ($endpoint) {
             http_response_code(405);
             echo json_encode(['error' => 'Method not allowed']);
         }
+        
         break;
         
     case 'test':
@@ -889,8 +1114,8 @@ switch ($endpoint) {
         http_response_code(404);
         echo json_encode(['error' => 'Endpoint not found']);
         break;
-}
-
-// Close the database connection
-$conn->close();
-?>
+ }
+ 
+ // Close the database connection
+ $conn->close();
+ ?>

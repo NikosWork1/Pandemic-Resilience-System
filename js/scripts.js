@@ -17,69 +17,83 @@ document.addEventListener('DOMContentLoaded', function() {
     // Handle login form
     const loginForm = document.getElementById('loginForm');
     if (loginForm) {
-        loginForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            // Clear previous error message
-            const errorDiv = document.getElementById('login-error');
-            if (errorDiv) {
-                errorDiv.textContent = '';
-                errorDiv.classList.add('d-none');
-            }
-            
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            
-            // Show a loading indicator or disable the button
-            const submitBtn = loginForm.querySelector('button[type="submit"]');
-            const originalText = submitBtn.textContent;
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Logging in...';
-            
-            fetch('api.php/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    email: email,
-                    password: password
-                })
-            })
-            .then(response => {
-                // Check if response is OK
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-                
-                // Check the content type
-                const contentType = response.headers.get('content-type');
-                if (!contentType || !contentType.includes('application/json')) {
-                    throw new Error(`Expected JSON response but got ${contentType}`);
-                }
-                
-                return response.json();
-            })
-            .then(data => {
-                if (data.token) {
-                    localStorage.setItem('prs_token', data.token);
-                    window.location.href = 'index.html';
-                } else {
-                    errorDiv.textContent = data.error || 'Login failed. Please try again.';
-                    errorDiv.classList.remove('d-none');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                errorDiv.textContent = 'An error occurred: ' + error.message;
-                errorDiv.classList.remove('d-none');
-            })
-            .finally(() => {
-                // Re-enable the button
-                submitBtn.disabled = false;
-                submitBtn.textContent = originalText;
+        // Update login fetch with comprehensive error handling
+loginForm.addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    // Clear previous error message
+    const errorDiv = document.getElementById('login-error');
+    errorDiv.textContent = '';
+    errorDiv.classList.add('d-none');
+    
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    
+    // Show a loading indicator or disable the button
+    const submitBtn = loginForm.querySelector('button[type="submit"]');
+    const originalText = submitBtn.textContent;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Logging in...';
+    
+    fetch('api.php/login', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'  // Explicitly request JSON
+        },
+        body: JSON.stringify({
+            email: email,
+            password: password
+        })
+    })
+    .then(response => {
+        // Log the entire response for debugging
+        console.log('Response status:', response.status);
+        console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+        
+        // Check response status
+        if (!response.ok) {
+            // Try to parse error response
+            return response.text().then(text => {
+                console.error('Error response text:', text);
+                throw new Error(`HTTP error! Status: ${response.status}, Response: ${text}`);
             });
-        });
+        }
+        
+        // Check content type
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            console.error('Expected JSON, got:', contentType);
+            throw new Error(`Expected JSON response but got ${contentType}`);
+        }
+        
+        return response.json();
+    })
+    .then(data => {
+        if (data.token) {
+            // Store the token
+            localStorage.setItem('prs_token', data.token);
+            
+            // Redirect to dashboard
+            window.location.href = 'index.html';
+        } else {
+            // Handle unexpected response structure
+            throw new Error('No token received');
+        }
+    })
+    .catch(error => {
+        console.error('Login Error:', error);
+        
+        // Display user-friendly error message
+        errorDiv.textContent = error.message || 'An unexpected error occurred during login';
+        errorDiv.classList.remove('d-none');
+    })
+    .finally(() => {
+        // Re-enable the button
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalText;
+    });
+});
     }
 
     // Handle registration form
