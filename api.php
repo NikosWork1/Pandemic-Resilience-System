@@ -362,8 +362,6 @@ switch ($endpoint) {
                 }
                 
                
-
-                #Let me continue with the rest of the API implementation:
                 $now = date('Y-m-d H:i:s');
                 $stmt = $conn->prepare("SELECT * FROM password_reset_tokens WHERE token = ? AND expires_at > ?");
                 $stmt->bind_param("ss", $data['token'], $now);
@@ -1162,6 +1160,185 @@ switch ($endpoint) {
         }
         
         break;
+    
+    // NEW ENDPOINT FOR APPOINTMENTS
+    case 'appointments':
+        // Handle appointment-related requests
+        $id = $request[1] ?? null;
+        
+        if ($method === 'GET') {
+            // Authentication required for all appointment requests
+            $auth_user_id = authenticate();
+            
+            if ($id) {
+                // Get specific appointment
+                $stmt = $conn->prepare("SELECT * FROM appointments WHERE appointment_id = ?");
+                $stmt->bind_param("i", $id);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                
+                if ($result->num_rows === 0) {
+                    http_response_code(404);
+                    echo json_encode(['error' => 'Appointment not found']);
+                    exit;
+                }
+                
+                $appointment = $result->fetch_assoc();
+                echo json_encode($appointment);
+            } else {
+                // Get all appointments for the user
+                $stmt = $conn->prepare("SELECT a.*, f.facility_name 
+                                     FROM appointments a
+                                     JOIN health_facilities f ON a.facility_id = f.facility_id
+                                     WHERE a.user_id = ?
+                                     ORDER BY a.appointment_date ASC");
+                $stmt->bind_param("i", $auth_user_id);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                
+                $appointments = [];
+                while ($row = $result->fetch_assoc()) {
+                    $appointments[] = $row;
+                }
+                
+                echo json_encode($appointments);
+            }
+        } elseif ($method === 'POST') {
+            // Create new appointment - requires authentication
+            $auth_user_id = authenticate();
+            
+            $data = json_decode(file_get_contents("php://input"), true);
+            
+            // Validate required fields
+            if (!isset($data['vaccine_type']) || !isset($data['appointment_date']) || 
+                !isset($data['appointment_time']) || !isset($data['facility_id'])) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Missing required fields']);
+                exit;
+            }
+            
+            // Insert new appointment
+            $stmt = $conn->prepare("INSERT INTO appointments 
+                                   (user_id, vaccine_type, appointment_date, appointment_time, facility_id, status) 
+                                   VALUES (?, ?, ?, ?, ?, 'scheduled')");
+            $stmt->bind_param("isssi", 
+                             $auth_user_id, 
+                             $data['vaccine_type'], 
+                             $data['appointment_date'], 
+                             $data['appointment_time'], 
+                             $data['facility_id']);
+            
+            if ($stmt->execute()) {
+                $appointment_id = $conn->insert_id;
+                
+                // Log the action
+                log_action($auth_user_id, 'CREATE', 'APPOINTMENT', $appointment_id);
+                
+                http_response_code(201);
+                echo json_encode([
+                    'status' => 'success',
+                    'message' => 'Appointment scheduled successfully',
+                    'appointment_id' => $appointment_id
+                ]);
+            } else {
+                http_response_code(500);
+                echo json_encode(['error' => 'Failed to schedule appointment: ' . $conn->error]);
+            }
+        } elseif ($method === 'PUT') {
+            // Update existing appointment
+            if (!$id) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Appointment ID is required']);
+                exit;
+            }
+            
+            $auth_user_id = authenticate();
+            
+            // Check if appointment exists and belongs to the user
+            $stmt = $conn->prepare("SELECT * FROM appointments WHERE appointment_id = ? AND user_id = ?");
+            $stmt->bind_param("ii", $id, $auth_user_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            
+            if ($result->num_rows === 0) {
+                http_response_code(404);
+                echo json_encode(['error' => 'Appointment not found or access denied']);
+                exit;
+            }
+            
+            $data = json_decode(file_get_contents("php://input"), true);
+            
+            // Update appointment
+            $stmt = $conn->prepare("UPDATE appointments 
+                                  SET vaccine_type = ?, appointment_date = ?, appointment_time = ?, 
+                                      facility_id = ?, status = ? 
+                                  WHERE appointment_id = ? AND user_id = ?");
+            $stmt->bind_param("sssisii", 
+                             $data['vaccine_type'], 
+                             $data['appointment_date'], 
+                             $data['appointment_time'], 
+                             $data['facility_id'], 
+                             $data['status'],
+                             $id,
+                             $auth_user_id);
+            
+            if ($stmt->execute()) {
+                // Log the action
+                log_action($auth_user_id, 'UPDATE', 'APPOINTMENT', $id);
+                
+                echo json_encode([
+                    'status' => 'success',
+                    'message' => 'Appointment updated successfully'
+                ]);
+            } else {
+                http_response_code(500);
+                echo json_encode(['error' => 'Failed to update appointment: ' . $conn->error]);
+            }
+        } elseif ($method === 'DELETE') {
+            // Cancel/delete appointment
+            if (!$id) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Appointment ID is required']);
+                exit;
+            }
+            
+            $auth_user_id = authenticate();
+            
+            // Check if appointment exists and belongs to the user
+            $stmt = $conn->prepare("SELECT * FROM appointments WHERE appointment_id = ? AND user_id = ?");
+            $stmt->bind_param("ii", $id, $auth_user_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            
+            if ($result->num_rows === 0) {
+                http_response_code(404);
+                echo json_encode(['error' => 'Appointment not found or access denied']);
+                exit;
+            }
+            
+            // Update status to canceled instead of deleting
+            $status = 'canceled';
+            $stmt = $conn->prepare("UPDATE appointments SET status = ? WHERE appointment_id = ?");
+            $stmt->bind_param("si", $status, $id);
+            
+            if ($stmt->execute()) {
+                // Log the action
+                log_action($auth_user_id, 'CANCEL', 'APPOINTMENT', $id);
+                
+                echo json_encode([
+                    'status' => 'success',
+                    'message' => 'Appointment canceled successfully'
+                ]);
+            } else {
+                http_response_code(500);
+                echo json_encode(['error' => 'Failed to cancel appointment: ' . $conn->error]);
+            }
+        } else {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+        }
+        break;
+    // END OF NEW ENDPOINT
         
     case 'test':
         // A simple test endpoint to verify API functionality
