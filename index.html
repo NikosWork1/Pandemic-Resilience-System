@@ -87,10 +87,11 @@
 
         <!-- Quick Forms Row - Add this section -->
         <div class="row mb-4">
-            <div class="col-md-6">
+            <div class="col-md-6 vaccination-form-container">
                 <div class="card shadow">
                     <div class="card-body">
                         <h5 class="card-title">Quick Add Vaccination Record</h5>
+                        <p class="text-muted admin-doctor-only">Only Government Officials and Healthcare Providers can add vaccination records</p>
                         <form id="quickVaccinationForm">
                             <div class="mb-3">
                                 <label for="quick_vaccine_name" class="form-label">Vaccine Name</label>
@@ -121,10 +122,11 @@
                 </div>
             </div>
 
-            <div class="col-md-6">
+            <div class="col-md-6 appointment-form-container">
                 <div class="card shadow">
                     <div class="card-body">
                         <h5 class="card-title">Quick Book Vaccination Appointment</h5>
+                        <p class="text-muted">Available for all users</p>
                         <form id="quickAppointmentForm">
                             <div class="mb-3">
                                 <label for="quick_vaccine_type" class="form-label">Vaccine Type</label>

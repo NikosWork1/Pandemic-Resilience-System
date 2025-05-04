@@ -551,6 +551,21 @@ switch ($endpoint) {
             // Create new vaccination record - requires authentication
             $auth_user_id = authenticate();
             
+            // Check user role - only Government Officials (role_id=1) and Healthcare Providers/Doctors (role_id=2) 
+            // should be able to add vaccination records
+            $stmt = $conn->prepare("SELECT role_id FROM users WHERE user_id = ?");
+            $stmt->bind_param("i", $auth_user_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $user = $result->fetch_assoc();
+            
+            // If user is a Public Member (role_id=3), return a 403 Forbidden response
+            if ($user['role_id'] == 3) {  // 3=Public Member
+                http_response_code(403);
+                echo json_encode(['error' => 'Forbidden: Public Members cannot add vaccination records']);
+                exit;
+            }
+            
             $data = json_decode(file_get_contents("php://input"), true);
             
             // Validate required fields
@@ -1254,9 +1269,24 @@ switch ($endpoint) {
             
             $auth_user_id = authenticate();
             
-            // Check if appointment exists and belongs to the user
-            $stmt = $conn->prepare("SELECT * FROM appointments WHERE appointment_id = ? AND user_id = ?");
-            $stmt->bind_param("ii", $id, $auth_user_id);
+            // Check user role to determine access level
+            $stmt = $conn->prepare("SELECT role_id FROM users WHERE user_id = ?");
+            $stmt->bind_param("i", $auth_user_id);
+            $stmt->execute();
+            $roleResult = $stmt->get_result();
+            $user = $roleResult->fetch_assoc();
+            $isAdmin = in_array($user['role_id'], [1, 2]); // Government Officials (1) or Healthcare Providers (2)
+            
+            if ($isAdmin) {
+                // Admin users can update any appointment
+                $stmt = $conn->prepare("SELECT * FROM appointments WHERE appointment_id = ?");
+                $stmt->bind_param("i", $id);
+            } else {
+                // Regular users can only update their own appointments
+                $stmt = $conn->prepare("SELECT * FROM appointments WHERE appointment_id = ? AND user_id = ?");
+                $stmt->bind_param("ii", $id, $auth_user_id);
+            }
+            
             $stmt->execute();
             $result = $stmt->get_result();
             
@@ -1268,19 +1298,35 @@ switch ($endpoint) {
             
             $data = json_decode(file_get_contents("php://input"), true);
             
-            // Update appointment
-            $stmt = $conn->prepare("UPDATE appointments 
-                                  SET vaccine_type = ?, appointment_date = ?, appointment_time = ?, 
-                                      facility_id = ?, status = ? 
-                                  WHERE appointment_id = ? AND user_id = ?");
-            $stmt->bind_param("sssisii", 
-                             $data['vaccine_type'], 
-                             $data['appointment_date'], 
-                             $data['appointment_time'], 
-                             $data['facility_id'], 
-                             $data['status'],
-                             $id,
-                             $auth_user_id);
+            // Update appointment - different SQL depending on user role
+            if ($isAdmin) {
+                // Admin can update any appointment
+                $stmt = $conn->prepare("UPDATE appointments 
+                                      SET vaccine_type = ?, appointment_date = ?, appointment_time = ?, 
+                                          facility_id = ?, status = ? 
+                                      WHERE appointment_id = ?");
+                $stmt->bind_param("sssisi", 
+                                 $data['vaccine_type'], 
+                                 $data['appointment_date'], 
+                                 $data['appointment_time'], 
+                                 $data['facility_id'], 
+                                 $data['status'],
+                                 $id);
+            } else {
+                // Regular users can only update their own appointments
+                $stmt = $conn->prepare("UPDATE appointments 
+                                      SET vaccine_type = ?, appointment_date = ?, appointment_time = ?, 
+                                          facility_id = ?, status = ? 
+                                      WHERE appointment_id = ? AND user_id = ?");
+                $stmt->bind_param("sssisii", 
+                                 $data['vaccine_type'], 
+                                 $data['appointment_date'], 
+                                 $data['appointment_time'], 
+                                 $data['facility_id'], 
+                                 $data['status'],
+                                 $id,
+                                 $auth_user_id);
+            }
             
             if ($stmt->execute()) {
                 // Log the action
@@ -1304,9 +1350,24 @@ switch ($endpoint) {
             
             $auth_user_id = authenticate();
             
-            // Check if appointment exists and belongs to the user
-            $stmt = $conn->prepare("SELECT * FROM appointments WHERE appointment_id = ? AND user_id = ?");
-            $stmt->bind_param("ii", $id, $auth_user_id);
+            // Check user role to determine access level
+            $stmt = $conn->prepare("SELECT role_id FROM users WHERE user_id = ?");
+            $stmt->bind_param("i", $auth_user_id);
+            $stmt->execute();
+            $roleResult = $stmt->get_result();
+            $user = $roleResult->fetch_assoc();
+            $isAdmin = in_array($user['role_id'], [1, 2]); // Government Officials (1) or Healthcare Providers (2)
+            
+            if ($isAdmin) {
+                // Admin users can cancel any appointment
+                $stmt = $conn->prepare("SELECT * FROM appointments WHERE appointment_id = ?");
+                $stmt->bind_param("i", $id);
+            } else {
+                // Regular users can only cancel their own appointments
+                $stmt = $conn->prepare("SELECT * FROM appointments WHERE appointment_id = ? AND user_id = ?");
+                $stmt->bind_param("ii", $id, $auth_user_id);
+            }
+            
             $stmt->execute();
             $result = $stmt->get_result();
             
@@ -1318,8 +1379,15 @@ switch ($endpoint) {
             
             // Update status to canceled instead of deleting
             $status = 'canceled';
-            $stmt = $conn->prepare("UPDATE appointments SET status = ? WHERE appointment_id = ?");
-            $stmt->bind_param("si", $status, $id);
+            
+            // Admin users can cancel any appointment, regular users only their own
+            if ($isAdmin) {
+                $stmt = $conn->prepare("UPDATE appointments SET status = ? WHERE appointment_id = ?");
+                $stmt->bind_param("si", $status, $id);
+            } else {
+                $stmt = $conn->prepare("UPDATE appointments SET status = ? WHERE appointment_id = ? AND user_id = ?");
+                $stmt->bind_param("sii", $status, $id, $auth_user_id);
+            }
             
             if ($stmt->execute()) {
                 // Log the action
@@ -1340,6 +1408,47 @@ switch ($endpoint) {
         break;
     // END OF NEW ENDPOINT
         
+    case 'get-all-appointments':
+        // Endpoint for admin users to get all appointments
+        if ($method === 'GET') {
+            // Authentication required for this endpoint
+            $auth_user_id = authenticate();
+            
+            // Check if user is an admin or healthcare provider
+            $stmt = $conn->prepare("SELECT role_id FROM users WHERE user_id = ?");
+            $stmt->bind_param("i", $auth_user_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $user = $result->fetch_assoc();
+            
+            // Only Government Officials (role_id=1) and Healthcare Providers (role_id=2) can access this endpoint
+            if (!in_array($user['role_id'], [1, 2])) {
+                http_response_code(403);
+                echo json_encode(['error' => 'Access denied. Only administrative users can view all appointments.']);
+                exit;
+            }
+            
+            // Get all appointments with user and facility information
+            $query = "SELECT a.*, f.facility_name, u.full_name
+                      FROM appointments a
+                      JOIN health_facilities f ON a.facility_id = f.facility_id
+                      JOIN users u ON a.user_id = u.user_id
+                      ORDER BY a.appointment_date ASC";
+            
+            $result = $conn->query($query);
+            
+            $appointments = [];
+            while ($row = $result->fetch_assoc()) {
+                $appointments[] = $row;
+            }
+            
+            echo json_encode($appointments);
+        } else {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+        }
+        break;
+    
     case 'test':
         // A simple test endpoint to verify API functionality
         header('Content-Type: application/json');

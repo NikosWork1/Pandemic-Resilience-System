@@ -246,6 +246,20 @@ function checkUserRole() {
                 window.location.href = 'index.html';
                 return;
             }
+            
+            // On dashboard, Public Members should only see appointment booking, not vaccination records
+            if (window.location.href.includes('index.html') || window.location.pathname === '/prs/' || window.location.pathname === '/prs') {
+                const vaccinationForm = document.getElementById('quickVaccinationForm');
+                if (vaccinationForm) {
+                    vaccinationForm.closest('.col-md-6').style.display = 'none';
+                    // Make the appointment form take full width
+                    const appointmentForm = document.getElementById('quickAppointmentForm');
+                    if (appointmentForm) {
+                        appointmentForm.closest('.col-md-6').classList.remove('col-md-6');
+                        appointmentForm.closest('.col').classList.add('col-md-12');
+                    }
+                }
+            }
         }
     })
     .catch(error => {

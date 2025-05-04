@@ -19,23 +19,57 @@ function initQuickVaccinationForm() {
     const quickVaccinationForm = document.getElementById('quickVaccinationForm');
     
     if (quickVaccinationForm) {
-        // Set default date to today
-        document.getElementById('quick_date_administered').valueAsDate = new Date();
+        // Check if user has permission to add vaccination records
+        const token = localStorage.getItem('prs_token');
+        const userId = getUserIdFromToken(token);
         
-        quickVaccinationForm.addEventListener('submit', function(e) {
-            e.preventDefault();
+        // Fetch user role before initializing form
+        fetch(`api.php/users/${userId}`, {
+            headers: {
+                'Authorization': token
+            }
+        })
+        .then(response => response.json())
+        .then(userData => {
+            // Only allow Government Officials (role_id=1) and Doctors/Healthcare providers (role_id=2)
+            // to add vaccination records
+            if (userData.role_id === 3) { // Public Member role_id
+                // Hide the vaccination form for Public Members
+                quickVaccinationForm.closest('.col-md-6').style.display = 'none';
+                
+                // Make the appointment form take full width if exists
+                const appointmentForm = document.getElementById('quickAppointmentForm');
+                if (appointmentForm) {
+                    appointmentForm.closest('.col-md-6').classList.remove('col-md-6');
+                    appointmentForm.closest('.col').classList.add('col-md-12');
+                }
+                return;
+            }
             
-            // Get form data
-            const vaccineData = {
-                user_id: getUserIdFromToken(localStorage.getItem('prs_token')),
-                vaccine_name: document.getElementById('quick_vaccine_name').value,
-                date_administered: document.getElementById('quick_date_administered').value,
-                dose_number: parseInt(document.getElementById('quick_dose_number').value),
-                provider: document.getElementById('quick_provider').value || null
-            };
+            // Continue with form initialization for authorized roles
+            // Set default date to today
+            document.getElementById('quick_date_administered').valueAsDate = new Date();
             
-            // Submit the vaccination record
-            submitVaccinationRecord(vaccineData);
+            quickVaccinationForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                // Get form data
+                const vaccineData = {
+                    user_id: userId,
+                    vaccine_name: document.getElementById('quick_vaccine_name').value,
+                    date_administered: document.getElementById('quick_date_administered').value,
+                    dose_number: parseInt(document.getElementById('quick_dose_number').value),
+                    provider: document.getElementById('quick_provider').value || null
+                };
+                
+                // Submit the vaccination record
+                submitVaccinationRecord(vaccineData);
+            });
+        })
+        .catch(error => {
+            console.error('Error fetching user role:', error);
+            // Hide form in case of error to prevent unauthorized access
+            quickVaccinationForm.closest('.col-md-6').style.display = 'none';
         });
     }
 }

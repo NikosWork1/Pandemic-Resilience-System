@@ -97,3 +97,17 @@ canvas {
 .row.mb-4 > .col-md-3:nth-child(4) .card {
     background-color: #fce4ec; /* Light Pink */
 }
+
+/* Role-based access control styling */
+.admin-doctor-only {
+    font-size: 0.8rem;
+    font-style: italic;
+    margin-top: -8px;
+    margin-bottom: 16px;
+}
+
+/* When vaccination form is hidden and appointment form takes full width */
+.appointment-form-container.col-md-12 .card {
+    max-width: 700px;
+    margin: 0 auto;
+}

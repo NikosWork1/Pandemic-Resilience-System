@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Appointment Scheduling | Pandemic Resilience System</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#">Pandemic Resilience System</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="index.html">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="health-facilities.html">Health Facilities</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="supply-management.html">Supply Management</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="appointment-scheduling.html">Appointments</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" id="logoutBtn">Logout</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card shadow">
+                    <div class="card-body">
+                        <h3 class="card-title">Appointment Scheduling</h3>
+                        <p class="card-text">Manage your vaccination appointments.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alert messages container -->
+        <div class="row mb-3">
+            <div class="col-md-12">
+                <div id="alertContainer"></div>
+            </div>
+        </div>
+
+        <!-- Filters & Controls -->
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card shadow">
+                    <div class="card-body">
+                        <h5 class="card-title">Filters and Controls</h5>
+                        <form id="filterForm" class="row g-3">
+                            <!-- User filter - for admin & healthcare providers only -->
+                            <div class="col-md-4 admin-doctor-only d-none">
+                                <label for="userFilter" class="form-label">User</label>
+                                <select class="form-select" id="userFilter">
+                                    <option value="">All Users</option>
+                                    <!-- User options will be populated dynamically -->
+                                </select>
+                            </div>
+
+                            <!-- Date range filters -->
+                            <div class="col-md-3">
+                                <label for="dateFromFilter" class="form-label">Date From</label>
+                                <input type="date" class="form-control" id="dateFromFilter">
+                            </div>
+                            <div class="col-md-3">
+                                <label for="dateToFilter" class="form-label">Date To</label>
+                                <input type="date" class="form-control" id="dateToFilter">
+                            </div>
+
+                            <!-- Status filter -->
+                            <div class="col-md-3">
+                                <label for="statusFilter" class="form-label">Status</label>
+                                <select class="form-select" id="statusFilter">
+                                    <option value="">All Statuses</option>
+                                    <option value="scheduled">Scheduled</option>
+                                    <option value="completed">Completed</option>
+                                    <option value="canceled">Canceled</option>
+                                </select>
+                            </div>
+
+                            <!-- Filter button -->
+                            <div class="col-md-3">
+                                <label class="form-label d-block">&nbsp;</label>
+                                <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Appointments Table -->
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card shadow">
+                    <div class="card-body">
+                        <h5 class="card-title">Your Appointments</h5>
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Vaccine Type</th>
+                                        <th>Date</th>
+                                        <th>Time</th>
+                                        <th>Facility</th>
+                                        <th>Status</th>
+                                        <th class="admin-doctor-only d-none">User</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="appointmentsTable">
+                                    <!-- Appointments will be loaded here -->
+                                    <tr>
+                                        <td colspan="8" class="text-center">Loading appointments...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="noAppointmentsMessage" class="alert alert-info d-none">
+                            No appointments found. <a href="index.html">Book a new appointment</a> on the dashboard.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reschedule Appointment Modal -->
+    <div class="modal fade" id="rescheduleModal" tabindex="-1" aria-labelledby="rescheduleModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="rescheduleModalLabel">Reschedule Appointment</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="rescheduleForm">
+                        <input type="hidden" id="appointment_id">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="vaccine_type" class="form-label">Vaccine Type</label>
+                                <select class="form-select" id="vaccine_type" required>
+                                    <option value="">Select vaccine type</option>
+                                    <option value="COVID-19">COVID-19</option>
+                                    <option value="Influenza">Influenza</option>
+                                    <option value="Hepatitis B">Hepatitis B</option>
+                                    <option value="Tetanus">Tetanus</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="facility_id" class="form-label">Facility</label>
+                                <select class="form-select" id="facility_id" required>
+                                    <option value="">Loading facilities...</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="appointment_date" class="form-label">Appointment Date</label>
+                                <input type="date" class="form-control" id="appointment_date" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="appointment_time" class="form-label">Appointment Time</label>
+                                <select class="form-select" id="appointment_time" required>
+                                    <option value="">Select time</option>
+                                    <option value="morning">Morning (9AM-12PM)</option>
+                                    <option value="afternoon">Afternoon (1PM-5PM)</option>
+                                    <option value="evening">Evening (6PM-8PM)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveReschedule">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="confirmationModalLabel">Confirm Action</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="confirmationMessage">Are you sure you want to cancel this appointment?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Keep It</button>
+                    <button type="button" class="btn btn-danger" id="confirmAction">Yes, Cancel Appointment</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/scripts.js"></script>
+    <script src="js/appointment-scheduling.js"></script>
+</body>
+</html>

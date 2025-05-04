@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vaccination Records | Pandemic Resilience System</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#">Pandemic Resilience System</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="index.html">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="health-facilities.html">Health Facilities</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="supply-management.html">Supply Management</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="appointment-scheduling.html">Appointments</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="vaccination-records.html">Vaccination Records</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" id="logoutBtn">Logout</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card shadow">
+                    <div class="card-body">
+                        <h3 class="card-title">Vaccination Records</h3>
+                        <p class="card-text">View and manage vaccination records in the system.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alert messages container -->
+        <div class="row mb-3">
+            <div class="col-md-12">
+                <div id="alertContainer"></div>
+            </div>
+        </div>
+
+        <!-- Filters & Controls -->
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card shadow">
+                    <div class="card-body">
+                        <h5 class="card-title">Filters and Controls</h5>
+                        <form id="filterForm" class="row g-3">
+                            <!-- User filter - for admin & healthcare providers only -->
+                            <div class="col-md-3 admin-doctor-only d-none">
+                                <label for="userFilter" class="form-label">User</label>
+                                <select class="form-select" id="userFilter">
+                                    <option value="">All Users</option>
+                                    <!-- User options will be populated dynamically -->
+                                </select>
+                            </div>
+
+                            <!-- Vaccine type filter -->
+                            <div class="col-md-3">
+                                <label for="vaccineTypeFilter" class="form-label">Vaccine Type</label>
+                                <select class="form-select" id="vaccineTypeFilter">
+                                    <option value="">All Vaccines</option>
+                                    <option value="COVID-19">COVID-19</option>
+                                    <option value="Influenza">Influenza</option>
+                                    <option value="Hepatitis B">Hepatitis B</option>
+                                    <option value="Tetanus">Tetanus</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+
+                            <!-- Date range filters -->
+                            <div class="col-md-3">
+                                <label for="dateFromFilter" class="form-label">Date From</label>
+                                <input type="date" class="form-control" id="dateFromFilter">
+                            </div>
+                            <div class="col-md-3">
+                                <label for="dateToFilter" class="form-label">Date To</label>
+                                <input type="date" class="form-control" id="dateToFilter">
+                            </div>
+
+                            <!-- Filter button -->
+                            <div class="col-md-3">
+                                <label class="form-label d-block">&nbsp;</label>
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="bi bi-filter"></i> Apply Filters
+                                </button>
+                            </div>
+
+                            <!-- Clear filters button -->
+                            <div class="col-md-3">
+                                <label class="form-label d-block">&nbsp;</label>
+                                <button type="button" id="clearFiltersBtn" class="btn btn-outline-secondary w-100">
+                                    <i class="bi bi-x-circle"></i> Clear Filters
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Vaccination Records Table -->
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card shadow">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="card-title mb-0">Vaccination Records</h5>
+                            <div>
+                                <span class="badge bg-primary me-2" id="recordCount">0</span>
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-outline-secondary" id="prevPageBtn" disabled>
+                                        <i class="bi bi-chevron-left"></i> Previous
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary" id="nextPageBtn" disabled>
+                                        Next <i class="bi bi-chevron-right"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th class="sortable" data-sort="record_id">ID <i class="bi bi-arrow-down-up"></i></th>
+                                        <th class="sortable" data-sort="vaccine_name">Vaccine Name <i class="bi bi-arrow-down-up"></i></th>
+                                        <th class="sortable" data-sort="date_administered">Date Administered <i class="bi bi-arrow-down-up"></i></th>
+                                        <th class="sortable" data-sort="dose_number">Dose # <i class="bi bi-arrow-down-up"></i></th>
+                                        <th class="sortable" data-sort="provider">Provider/Location <i class="bi bi-arrow-down-up"></i></th>
+                                        <th class="admin-doctor-only d-none sortable" data-sort="user_id">User <i class="bi bi-arrow-down-up"></i></th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="vaccinationRecordsTable">
+                                    <!-- Vaccination records will be loaded here -->
+                                    <tr>
+                                        <td colspan="7" class="text-center">Loading vaccination records...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="noRecordsMessage" class="alert alert-info d-none">
+                            No vaccination records found with the current filters. 
+                        </div>
+                        <div id="paginationControls" class="d-flex justify-content-between align-items-center mt-3">
+                            <div>
+                                <span class="text-muted">Showing <span id="pageInfo">0-0 of 0</span> records</span>
+                            </div>
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-outline-secondary" id="prevPageBtnBottom" disabled>
+                                    <i class="bi bi-chevron-left"></i> Previous
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary" id="nextPageBtnBottom" disabled>
+                                    Next <i class="bi bi-chevron-right"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Record Details Modal -->
+    <div class="modal fade" id="recordDetailsModal" tabindex="-1" aria-labelledby="recordDetailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="recordDetailsModalLabel">Vaccination Record Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <h6>Record ID</h6>
+                            <p id="detail_record_id" class="fw-bold">-</p>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <h6>Vaccine Name</h6>
+                            <p id="detail_vaccine_name" class="fw-bold">-</p>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <h6>Date Administered</h6>
+                            <p id="detail_date_administered">-</p>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <h6>Dose Number</h6>
+                            <p id="detail_dose_number">-</p>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <h6>Provider/Location</h6>
+                            <p id="detail_provider">-</p>
+                        </div>
+                        <div class="col-md-6 mb-3 admin-doctor-only d-none">
+                            <h6>Patient</h6>
+                            <p id="detail_user">-</p>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <h6>Lot Number</h6>
+                            <p id="detail_lot_number">-</p>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <h6>Expiration Date</h6>
+                            <p id="detail_expiration_date">-</p>
+                        </div>
+                    </div>
+                    <div class="row admin-doctor-only d-none">
+                        <div class="col-md-12 mb-3">
+                            <h6>Record Created By</h6>
+                            <p id="detail_created_by">-</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/scripts.js"></script>
+    <script src="js/vaccination-records.js"></script>
+</body>
+</html>
