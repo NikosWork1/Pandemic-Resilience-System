@@ -20,7 +20,10 @@ Audit Logging: Comprehensive activity tracking for security
 
 🔑 Demo Credentials
 You can test the system with the following accounts:
-RoleEmailPasswordGovernment Officialsarah.johnson@health.govpassword123Merchantrobert.williams@medsupply.compassword123Public Memberpatricia.moore@email.compassword123Healthcare Providerdaniel.anderson@hospital.orgpassword123System Administratoradmin@prs-system.orgpassword123
+Government Official: xrys@gmail.com/ securepassword
+Doctors: DoctorAlpha@gmail.com/ Securepassword1!
+Users: xrysomallis1@gmail.com/ Nikos1996
+
 🛠️ Technology Stack
 
 Backend: PHP 7.4+
