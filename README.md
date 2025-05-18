@@ -1,10 +1,13 @@
 Pandemic Resilience System (PRS)
 A comprehensive web-based platform for managing pandemic-related activities, including vaccination tracking, supply chain management, and public health monitoring.
+
+
 🌐 Live Demo
 The system is deployed and accessible at:
 https://pandemic-resilience-system-production.up.railway.app/
 📋 Overview
 The Pandemic Resilience System (PRS) is built using PHP, MySQL, JavaScript (Chart.js), and Apache. It provides a complete solution for pandemic management with role-based access control, allowing government officials, healthcare providers, merchants, and the public to access appropriate features.
+
 Key Features
 
 User Management: Registration, authentication, and role-based access control
