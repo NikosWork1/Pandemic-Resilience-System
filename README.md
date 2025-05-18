@@ -99,7 +99,7 @@ Can upload medical documentation
 Limited access to supply inventory
 
 
-Merchants:
+Doctors:
 
 Can manage inventory of critical items
 Can verify purchase eligibility
