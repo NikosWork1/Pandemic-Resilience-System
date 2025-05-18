@@ -157,21 +157,6 @@ Frontend.docx: Frontend architecture and components
 Security.docx: Security implementation details
 User Manual.docx: End-user documentation
 
-🤝 Contributing
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-Fork the repository
-Create your feature branch (git checkout -b feature/amazing-feature)
-Commit your changes (git commit -m 'Add some amazing feature')
-Push to the branch (git push origin feature/amazing-feature)
-Open a Pull Request
-
-📄 License
-This project is licensed under the MIT License - see the LICENSE file for details.
-👥 Project Team
-
-Developed as part of the Pandemic Management Systems course
-Contributors: [Your Name]
 
 📧 Contact
 For questions or support, please contact: xrysomallis1@gmaiil.com
